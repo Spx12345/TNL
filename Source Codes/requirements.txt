@@ -1,0 +1,14 @@
+streamlit
+transformers
+torch
+onnxruntime
+scikit-learn
+joblib
+pandas
+matplotlib
+wordcloud
+seaborn
+plotly
+ftfy
+emoji
+nltk

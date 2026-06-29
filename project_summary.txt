@@ -1,0 +1,328 @@
+================================================================================
+MALAYSIA eWALLET SENTIMENT ANALYSIS — COMPLETE PROJECT SUMMARY
+Generated: 2026-06-28
+Course: TNL6323 Natural Language Processing
+================================================================================
+
+## 1. PROJECT IDENTITY
+
+Project Title:
+  Aspect-Based Sentiment Analysis of Malaysian eWallet Applications
+
+Project Objective:
+  To determine which features of Malaysian eWallet applications — specifically
+  payment reliability, user interface, customer service, and promotional rewards
+  — drive the most positive and negative sentiment among Malaysian users.
+  Compare sentiment across Touch 'n Go eWallet, GrabPay, and ShopeePay.
+
+Domain:
+  Natural Language Processing / Sentiment Analysis / FinTech (eWallets)
+  Geographic focus: Malaysia (Google Play Store MY, English + Bahasa Malaysia)
+
+Course Code:
+  TNL6323 — Natural Language Processing
+
+
+## 2. DATA COLLECTION
+
+Source of Data:
+  Google Play Store — Malaysia region
+
+Apps Scraped:
+  1. Touch 'n Go eWallet  (source: touchngo)  — app_id: my.com.tngdigital.ewallet
+  2. GrabPay               (source: grabpay)   — app_id: com.grabtaxi.passenger
+  3. ShopeePay             (source: shopeepay) — app_id: com.shopee.my
+
+Total Raw Reviews Collected:
+  7,815 reviews
+
+Raw Distribution by App:
+  - shopeepay: 2,693 reviews (1,143 positive, 546 neutral, 1,004 negative by stars)
+  - touchngo:  2,607 reviews (1,084 positive, 504 neutral, 1,019 negative by stars)
+  - grabpay:   2,515 reviews (1,068 positive, 484 neutral, 963 negative by stars)
+
+Method Used for Scraping:
+  Python google-play-scraper library (no API key required)
+  Multiple scrape scripts for targeted collection (initial, neutral boost,
+  extra positive/negative, large batch). Languages: English (en) and
+  Bahasa Malaysia (ms), country: my.
+
+Raw File Location and Size:
+  /Data/raw_reviews.csv — 1.65 MB, 7,815 rows, 9 columns
+  Columns: reviewId, userName, content, score, thumbsUpCount, at, appName,
+           source, sentiment (star-based)
+
+
+## 3. PREPROCESSING
+
+Script: /Source Codes/preprocess.py
+
+Steps Performed:
+  1. Encoding fix (ftfy) and emoji extraction + emoji sentiment classification
+  2. Text cleaning — remove URLs/HTML/control chars, reduce repeated chars,
+     preserve casing and punctuation
+  3. NLTK tokenization (punctuation kept)
+  4. Stopword removal — English + Malaysian fillers removed; sentiment words kept
+  5. Sentiment labeling — XLM-RoBERTa teacher model
+     (cardiffnlp/twitter-xlm-roberta-base-sentiment)
+  6. Keyword-based aspect detection (payment, ui, service, rewards, general)
+  7. Dataset balancing — 220 reviews per sentiment per app = 1,980 rows
+  8. Visualization generation — 7 charts saved to /Data/charts/
+
+Libraries Used:
+  pandas, ftfy, emoji, nltk, torch, transformers, matplotlib, seaborn, wordcloud
+
+Final Cleaned Dataset:
+  Total rows:     1,980
+  Rows per app:   660 each (touchngo: 660, grabpay: 660, shopeepay: 660)
+  Rows per sentiment per app: 220 positive, 220 neutral, 220 negative (all apps)
+
+  Columns (15):
+    id, source, content, cleaned_text, tokens, filtered_tokens,
+    emojis_found, emoji_sentiment, sentiment, sentiment_stars,
+    aspect_payment, aspect_ui, aspect_service, aspect_rewards, aspect_label
+
+File Location:
+  /Data/sentiment_data_cleaned.csv — 1.05 MB
+
+
+## 4. LABELING
+
+Script: /Source Codes/label_aspect_roberta.py (current)
+Legacy:  /Source Codes/label_absa.py (Groq/Gemini API — superseded)
+
+Sentiment Labeling Method:
+  XLM-RoBERTa base sentiment model applied during preprocessing
+  (cardiffnlp/twitter-xlm-roberta-base-sentiment)
+  Labels: positive, neutral, negative
+
+Aspect Labeling Method:
+  Zero-shot classification using facebook/bart-large-mnli
+  Hypothesis template: "This review is about {}"
+  Runs locally — no API key required
+  Batch size: 16, checkpoint every 50 rows
+
+Aspect Categories Used:
+  payment, ui, service, rewards, general
+
+ABSA Combined Labels Created:
+  absa_label = aspect_label + "_" + sentiment
+  Example: payment_negative, ui_positive, rewards_neutral
+  Total unique combined labels: 15
+
+  Aspect distribution (BART zero-shot):
+    ui: 588 | service: 489 | payment: 469 | general: 384 | rewards: 50
+
+  Average aspect confidence: 0.361
+
+Additional Label Columns:
+  aspect_label_keyword  — original keyword aspect from preprocessing
+  aspect_confidence     — BART zero-shot confidence score
+  absa_sentiment        — sentiment from XLM-RoBERTa (same as sentiment column)
+
+File Locations:
+  /Data/sentiment_data_absa_labeled.csv — 1.14 MB, 1,980 rows, 19 columns
+  /Data/absa_progress.csv               — 1.14 MB (labeling checkpoint)
+
+
+## 5. MODELS TRAINED
+
+Script: /Source Codes/train_models.py
+Training Date: 2026-06-28 17:07:22
+Device Used: GPU
+Training Time: 2.7 mins
+
+Architecture:
+  Single dual-head mBERT model (bert-base-multilingual-cased)
+  - Shared BERT encoder (lower 6 layers frozen)
+  - Head 1: Linear(768, 3) — Sentiment classification
+  - Head 2: Linear(768, 5) — Aspect classification
+  - Combined loss = sentiment_loss + aspect_loss
+
+Model 1 — mBERT Sentiment Head:
+  Name:         Dual-Head mBERT (Sentiment)
+  Architecture: bert-base-multilingual-cased + Linear sentiment head (3 classes)
+  Accuracy:     71.46%
+  F1 Score:     71.54%
+
+Model 2 — mBERT Aspect Head:
+  Name:         Dual-Head mBERT (Aspect)
+  Architecture: bert-base-multilingual-cased + Linear aspect head (5 classes)
+  Accuracy:     51.77%
+  F1 Score:     50.17%
+
+Combined Accuracy (both heads correct on same review): 38.64%
+
+ONNX Export:
+  /Models/mbert_model.onnx — 678.75 MB (opset 14, dual outputs:
+  sentiment_logits + aspect_logits)
+
+Files Saved in /Models/:
+  mbert_model/
+    config.json              902 B
+    dual_head_config.json    294 B
+    pytorch_model.bin        678.56 MB
+    model.safetensors        678.49 MB
+  mbert_tokenizer/
+    tokenizer.json           2.78 MB
+    tokenizer_config.json    367 B
+  mbert_model.onnx           678.75 MB
+  mbert_training_time.txt    16 B
+  model_results.txt          1.97 KB
+
+Legacy Files (from earlier pipeline — not used by current app):
+  absa_model.pkl               1.15 MB
+  absa_vectorizer.pkl        395.91 KB
+  aspect_model.pkl             196.34 KB
+  logistic_regression_model.pkl 118.06 KB
+  tfidf_vectorizer.pkl         188.21 KB
+
+
+## 6. ADVANCED FEATURES
+
+  ✅ Transformer model (dual-head mBERT — bert-base-multilingual-cased)
+  ✅ Zero-shot aspect labeling (BART-large-MNLI — facebook/bart-large-mnli)
+  ✅ Aspect-Based Sentiment Analysis (ABSA combined labels)
+  ✅ Emoji sentiment detection and extraction
+  ✅ ONNX model optimization for faster deployment inference
+  ✅ Multilingual support (English + Bahasa Malaysia reviews)
+  ✅ Dual-output single-pass inference (sentiment + aspect from one model)
+  ✅ Teacher model sentiment labeling (XLM-RoBERTa)
+  ✅ Balanced dataset design (220 per sentiment per app)
+  ✅ Checkpoint/resume support for long labeling jobs
+  ✅ Interactive Streamlit dashboard with Plotly visualizations
+  ✅ Automated encoding fix pipeline (ftfy)
+  ✅ Malaysian-specific stopword handling
+
+
+## 7. DEPLOYMENT
+
+Platform:
+  Streamlit web application
+
+Run Command:
+  python -m streamlit run "Source Codes/app.py"
+
+Number of Pages: 3
+
+Page 1 — Sentiment Analyser:
+  - User enters eWallet review text
+  - Selects eWallet app (Touch n Go / GrabPay / ShopeePay)
+  - Single dual-head mBERT ONNX inference returns sentiment + aspect
+  - Displays: overall sentiment box, aspect analysis, combined insight
+  - Emoji detection with tone signal
+  - Confidence scores for both heads
+
+Page 2 — eWallet Comparison Dashboard:
+  - Key metrics (total reviews, most positive app, most complained aspect)
+  - Sentiment comparison bar chart by app
+  - Aspect breakdown chart by app
+  - Aspect vs sentiment heatmap
+  - Word cloud tabs (positive / neutral / negative)
+  - Auto-generated conclusion from dataset
+
+Page 3 — About This Project:
+  - Project overview, dataset info, methodology
+  - Model accuracy metrics (read from model_results.txt)
+  - Advanced features list
+  - Group members section
+
+
+## 8. SOURCE CODE FILES
+
+/Source Codes/ — 15 files:
+
+  app.py                    — Streamlit web app (3 pages, dual-head ONNX inference)
+  preprocess.py             — Full 8-step preprocessing pipeline + chart generation
+  label_aspect_roberta.py   — BART zero-shot aspect labeling (current labeling script)
+  label_absa.py             — Legacy Groq API aspect labeling (superseded)
+  train_models.py           — Dual-head mBERT training + ONNX export
+  fix_encoding.py           — Fix broken emoji/text encoding in all CSV files
+  requirements.txt          — Python dependencies for Streamlit app
+  scrape_reviews.py         — Initial Google Play Store review scraper
+  scrape_neutral.py         — Scrape extra neutral (3-star) reviews
+  scrape_extra.py           — Scrape extra 1-2 star and 4-5 star reviews
+  scrape_extra_reviews.py   — Targeted review top-ups for specific apps
+  scrape_big.py             — Large-scale review scraping
+  scrape_more_positive.py   — Scrape extra 4-star and 5-star positive reviews
+  balance_absa.py           — ABSA dataset oversampling helper (optional)
+  retrain_models.py         — Legacy hyperparameter search script (superseded)
+
+
+## 9. DATA FILES
+
+/Data/ — CSV files:
+
+  raw_reviews.csv                  1.65 MB  |  7,815 rows  |  9 columns
+  sentiment_data_cleaned.csv       1.05 MB  |  1,980 rows  | 15 columns
+  sentiment_data_absa_labeled.csv  1.14 MB  |  1,980 rows  | 19 columns
+  absa_progress.csv                1.14 MB  |  1,980 rows  | 19 columns (checkpoint)
+
+/Data/charts/ — 9 visualization files:
+
+  sentiment_distribution.png       36.33 KB
+  sentiment_per_app.png            33.31 KB
+  aspect_distribution.png          47.17 KB
+  aspect_per_app.png               39.97 KB
+  aspect_sentiment_heatmap.png     50.31 KB
+  emoji_distribution.png           29.65 KB
+  wordcloud_positive.png          524.02 KB
+  wordcloud_neutral.png           496.20 KB
+  wordcloud_negative.png          466.87 KB
+
+
+## 10. MODEL FILES
+
+/Models/ — active model files:
+
+  mbert_model/pytorch_model.bin         678.56 MB  — Dual-head mBERT weights
+  mbert_model/model.safetensors         678.49 MB  — Dual-head mBERT (safetensors)
+  mbert_model.onnx                      678.75 MB  — ONNX export (production)
+  mbert_tokenizer/tokenizer.json          2.78 MB  — BertTokenizer vocabulary
+  mbert_model/config.json                   902 B  — BERT config
+  mbert_model/dual_head_config.json         294 B  — Dual-head label mappings
+  mbert_tokenizer/tokenizer_config.json     367 B  — Tokenizer config
+  model_results.txt                        1.97 KB  — Training metrics report
+  mbert_training_time.txt                     16 B  — Training duration (2.7 mins)
+
+/Models/ — legacy files (not used by current app):
+
+  absa_model.pkl                         1.15 MB
+  absa_vectorizer.pkl                  395.91 KB
+  aspect_model.pkl                     196.34 KB
+  logistic_regression_model.pkl        118.06 KB
+  tfidf_vectorizer.pkl                 188.21 KB
+
+
+## 11. SUBMISSION CHECKLIST
+
+  Data (cleaned)              ✅  sentiment_data_cleaned.csv (1,980 rows)
+  Data (labeled)              ✅  sentiment_data_absa_labeled.csv (1,980 rows)
+  Source codes                ✅  15 scripts in /Source Codes/
+  Trained models              ✅  Dual-head mBERT + ONNX in /Models/
+  Visualizations              ✅  9 charts in /Data/charts/
+  Streamlit app               ✅  /Source Codes/app.py
+  Model results               ✅  /Models/model_results.txt
+  Report                      ❌  Not found in project folder
+  User manual                 ❌  Not found in project folder
+  Group contribution form     ❌  Not found in project folder
+  Demo video                  ❌  Not found in project folder
+
+
+## 12. WHAT IS STILL MISSING
+
+  1. Final project REPORT document (PDF/Word) — not present in project folder
+  2. USER MANUAL — instructions for running and using the system
+  3. GROUP CONTRIBUTION FORM — not present
+  4. DEMO VIDEO — not present in project folder
+  5. Group member names — still placeholders [Name] in app.py Page 3
+  6. Legacy model/script cleanup — old ABSA LR models and label_absa.py /
+     retrain_models.py could be removed or documented as deprecated
+  7. Aspect head performance — rewards class has 0% F1 (only 7 test samples);
+     combined accuracy is 38.64% — consider noting limitations in report
+  8. BART aspect confidence is relatively low (avg 0.36) — discuss in report
+  9. project_summary.txt — this file (being generated now)
+
+================================================================================
+END OF PROJECT SUMMARY
+================================================================================
