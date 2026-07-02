@@ -1,5 +1,5 @@
 """
-Malaysian eWallet ABSA — Streamlit Web Application
+Technology-Focused Malaysian eWallet ABSA — Streamlit Web Application
 TNL6323 — Natural Language Processing
 """
 
@@ -30,7 +30,7 @@ SENTIMENT_LABELS = {0: "negative", 1: "neutral", 2: "positive"}
 ASPECT_LABELS = {0: "payment", 1: "ui", 2: "service", 3: "rewards", 4: "general"}
 
 APP_OPTIONS = {
-    "Touch n Go eWallet": "touchngo",
+    "Touch 'n Go eWallet": "touchngo",
     "GrabPay": "grabpay",
     "ShopeePay": "shopeepay",
 }
@@ -60,7 +60,7 @@ NEGATIVE_EMOJIS = {
 }
 
 st.set_page_config(
-    page_title="Malaysian eWallet Sentiment Analyser",
+    page_title="Malaysian FinTech eWallet Sentiment Analyser",
     page_icon="🇲🇾",
     layout="wide",
 )
@@ -265,7 +265,7 @@ def render_aspect_analysis(aspect: str, sentiment: str, aspect_confidence: float
                 <strong>{aspect_confidence * 100:.1f}%</strong> confidence
             </p>
             <p style="margin:0;font-size:1.05em;">
-                Overall sentiment toward this review:
+                Overall review sentiment:
                 <strong style="color:{asp_style['border']};">
                     {asp_style['label']} {asp_style['emoji']}
                 </strong>
@@ -274,6 +274,12 @@ def render_aspect_analysis(aspect: str, sentiment: str, aspect_confidence: float
         """,
         unsafe_allow_html=True,
     )
+
+    if aspect_confidence < 0.50:
+        st.warning(
+            "Low-confidence aspect prediction. Treat this category as an exploratory "
+            "suggestion rather than a definitive classification."
+        )
 
 
 def render_combined_insight(
@@ -304,8 +310,8 @@ def render_combined_insight(
 
 
 def page_sentiment_analyser() -> None:
-    st.title("🇲🇾 Malaysian eWallet Sentiment Analyser")
-    st.caption("Touch n Go | GrabPay | ShopeePay")
+    st.title("🇲🇾 Malaysian FinTech eWallet Sentiment Analyser")
+    st.caption("Technology (Malaysia Tech Scene) · Touch 'n Go · GrabPay · ShopeePay")
 
     if not models_available():
         st.error("Model files not found. Please run train_models.py first.")
@@ -359,48 +365,46 @@ def page_sentiment_analyser() -> None:
 
 
 def compute_conclusion(df: pd.DataFrame) -> str:
-    pos_pct = (
-        df.groupby("source")["sentiment"]
-        .apply(lambda s: (s == "positive").mean() * 100)
-        .sort_values(ascending=False)
-    )
-    top_app = APP_DISPLAY[pos_pct.index[0]]
-    top_pct = pos_pct.iloc[0]
+    reviews_per_app = df.groupby("source").size()
+    balanced_per_app = int(reviews_per_app.min()) if len(reviews_per_app) else 0
 
-    neg_aspects = df[df["absa_sentiment"] == "negative"]["aspect_label"].value_counts()
-    top_complaint = neg_aspects.index[0] if len(neg_aspects) else "payment"
+    overall_aspects = df["aspect_label"].value_counts()
+    top_aspect = overall_aspects.index[0] if len(overall_aspects) else "general"
+    top_aspect_count = int(overall_aspects.iloc[0]) if len(overall_aspects) else 0
+
+    negative_rows = df[df["absa_sentiment"] == "negative"]
+    neg_aspects = negative_rows["aspect_label"].value_counts()
+    top_complaint = neg_aspects.index[0] if len(neg_aspects) else "general"
     top_complaint_count = int(neg_aspects.iloc[0]) if len(neg_aspects) else 0
 
-    rewards_pos = (
-        df[(df["aspect_label"] == "rewards") & (df["sentiment"] == "positive")]
-        .groupby("source")
-        .size()
-        .sort_values(ascending=False)
-    )
-    rewards_app = APP_DISPLAY[rewards_pos.index[0]] if len(rewards_pos) else "ShopeePay"
     ui_counts = df[df["aspect_label"] == "ui"]["sentiment"].value_counts(normalize=True)
 
-    return f"""📊 **Key Findings from 1,980 Malaysian eWallet Reviews:**
+    top_aspect_name = ASPECT_INFO.get(top_aspect, ("", top_aspect.title()))[1]
+    complaint_name = ASPECT_INFO.get(top_complaint, ("", top_complaint.title()))[1]
 
-✅ **{top_app}** leads with the highest positive sentiment at **{top_pct:.1f}%** among Malaysian users
+    return f"""📊 **Key Findings from {len(df):,} Malaysian FinTech eWallet Reviews:**
 
-⚠️ **{ASPECT_INFO.get(top_complaint, ('', top_complaint.title()))[1]}** is the most complained about aspect with **{top_complaint_count}** negative mentions overall
+⚖️ The dataset is intentionally balanced at **{balanced_per_app} reviews per application**, with equal positive, neutral and negative sentiment counts. The dashboard therefore does not rank one eWallet as the most positive.
 
-🎁 **{rewards_app}** receives the most praise for promotional rewards and cashback offers
+🔎 **{top_aspect_name}** is the most frequently assigned dominant aspect with **{top_aspect_count}** reviews.
 
-📱 User interface receives mixed feedback across all three eWallet applications ({ui_counts.get('positive', 0) * 100:.0f}% positive, {ui_counts.get('neutral', 0) * 100:.0f}% neutral, {ui_counts.get('negative', 0) * 100:.0f}% negative among UI-related reviews)"""
+⚠️ **{complaint_name}** is the most frequent aspect among negative reviews with **{top_complaint_count}** mentions.
+
+📱 Among UI-related reviews, the sentiment mix is **{ui_counts.get('positive', 0) * 100:.0f}% positive**, **{ui_counts.get('neutral', 0) * 100:.0f}% neutral**, and **{ui_counts.get('negative', 0) * 100:.0f}% negative**.
+
+ℹ️ Aspect findings are exploratory because the aspect labels were produced through zero-shot pseudo-labelling and include low-confidence cases."""
 
 
 def page_dashboard() -> None:
-    st.title("📊 eWallet Sentiment Dashboard")
+    st.title("📊 Malaysian FinTech eWallet Sentiment Dashboard")
 
     df = load_dataset()
     if df.empty:
         st.error(f"Dataset not found at {DATA_PATH}. Please run label_aspect_roberta.py first.")
         return
 
-    pos_by_app = df.groupby("source")["sentiment"].apply(lambda s: (s == "positive").mean() * 100)
-    most_positive_app = APP_DISPLAY[pos_by_app.idxmax()]
+    reviews_per_app = df.groupby("source").size()
+    balanced_reviews_per_app = int(reviews_per_app.min()) if len(reviews_per_app) else 0
 
     neg_aspects = df[df["absa_sentiment"] == "negative"]["aspect_label"].value_counts()
     most_complained = ASPECT_INFO.get(
@@ -409,8 +413,14 @@ def page_dashboard() -> None:
 
     m1, m2, m3 = st.columns(3)
     m1.metric("Total Reviews Analysed", f"{len(df):,}")
-    m2.metric("Most Positive App", most_positive_app)
+    m2.metric("Balanced Reviews per App", f"{balanced_reviews_per_app:,}")
     m3.metric("Most Complained Aspect", most_complained)
+
+    st.info(
+        "The dataset contains equal positive, neutral and negative counts for each "
+        "application. App-level positive-rate rankings are therefore intentionally "
+        "not shown."
+    )
 
     st.divider()
 
@@ -491,19 +501,22 @@ def page_about() -> None:
     with st.expander("Project Overview", expanded=True):
         st.markdown(
             """
-            **Title:** Aspect-Based Sentiment Analysis of Malaysian eWallet Applications
+            **Domain:** Technology (Malaysia Tech Scene) — Financial Technology
 
-            **Objective:** To determine which features of Malaysian eWallet applications —
-            specifically payment reliability, user interface, customer service and promotional
-            rewards — drive the most positive and negative sentiment among Malaysian users.
+            **Title:** Aspect-Based Sentiment Analysis of Malaysian FinTech eWallet Applications
+
+            **Objective:** To analyse how payment reliability, user interface, customer service
+            and promotional rewards are associated with positive and negative sentiment among
+            Malaysian eWallet users.
             """
         )
 
     with st.expander("Dataset Information"):
         st.markdown(
             """
+            - **Technology focus:** Malaysian financial technology and mobile payment applications
             - **Source:** Google Play Store Malaysia
-            - **Apps:** Touch n Go eWallet, GrabPay, ShopeePay
+            - **Apps:** Touch 'n Go eWallet, GrabPay, ShopeePay
             - **Total reviews:** 1,980 (balanced)
             - **Per app:** 660 reviews (220 per sentiment class)
             - **Language:** English and Bahasa Malaysia
@@ -555,16 +568,16 @@ def main() -> None:
     st.sidebar.title("Navigation")
     page = st.sidebar.radio(
         "Go to",
-        ["Sentiment Analyser", "eWallet Comparison Dashboard", "About This Project"],
+        ["Sentiment Analyser", "FinTech Comparison Dashboard", "About This Project"],
         label_visibility="collapsed",
     )
     st.sidebar.divider()
-    st.sidebar.caption("TNL6323 NLP — Malaysian eWallet ABSA")
-    st.sidebar.caption("Touch n Go · GrabPay · ShopeePay")
+    st.sidebar.caption("TNL6323 NLP — Technology / Malaysian FinTech")
+    st.sidebar.caption("Touch 'n Go · GrabPay · ShopeePay")
 
     if page == "Sentiment Analyser":
         page_sentiment_analyser()
-    elif page == "eWallet Comparison Dashboard":
+    elif page == "FinTech Comparison Dashboard":
         page_dashboard()
     else:
         page_about()

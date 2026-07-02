@@ -1,5 +1,4 @@
 eWallet ABSA — Dual-Head mBERT Training Results
-Training Date: 2026-06-28 17:07:22
 Dataset: 1980 rows, 3 apps, 220 per sentiment per app
 Device used: GPU
 Training Time: 2.7 mins
